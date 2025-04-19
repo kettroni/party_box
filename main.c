@@ -9,7 +9,7 @@ int SCREEN_HALF_H;
 int N_COLORS=12;
 Color COLORS[13]={RED, WHITE, BLUE, ORANGE, PINK, MAROON, GREEN, LIME, DARKGREEN, SKYBLUE, DARKBLUE, PURPLE, YELLOW};
 Color PLAYER_COLOR=RED;
-Rectangle PLAYER_RECTANGLE={0.0, 0.0, 100.0, 100.0};
+Rectangle PLAYER_RECTANGLE={0.0, 0.0, 200.0, 200.0};
 unsigned int SEED=69;
 
 const char* BUNNY_SRC = "resources/bunny.png";
@@ -52,7 +52,13 @@ World initialize_world() {
   // Player
   Player player;
   player.color = PLAYER_COLOR;
-  player.rectangle = PLAYER_RECTANGLE;
+  Rectangle rec = {
+    SCREEN_HALF_W-PLAYER_RECTANGLE.width/2,
+    SCREEN_HALF_H-PLAYER_RECTANGLE.height/2,
+    PLAYER_RECTANGLE.width,
+    PLAYER_RECTANGLE.height,
+  };
+  player.rectangle = rec;
   Velocity velocity = {0.0, 0.0};
   player.velocity = velocity;
   Texture2D bunny = LoadTexture(BUNNY_SRC);
@@ -61,7 +67,7 @@ World initialize_world() {
     0.0f,
     0.0f,
     (float)player.texture2d.width,
-    (float)player.texture2d.height
+    (float)player.texture2d.height,
   };
   player.srcRec = srcRec;
 
@@ -79,47 +85,14 @@ void DrawTextCenter(const char *text, int fontSize, Color color) {
   DrawText(text, SCREEN_HALF_W-textWidth/2, SCREEN_HALF_H-textHeight/2, fontSize, color);
 }
 
-void DrawPlayer(World *world) {
-  Player pl = world->player;
-  Rectangle rec = pl.rectangle;
-
-  Vector2 origin = { 0.0f, 0.0f };
-
-  float overflowX = rec.x + rec.width - SCREEN_WIDTH;
-  bool resetX = overflowX > rec.width;
-  if (resetX) {
-    world->player.rectangle.x = 0;
-  }
-  else if (overflowX > 0) {
-    Rectangle destRec = {-rec.width+overflowX, rec.y, rec.width, rec.height};
-    DrawTexturePro(pl.texture2d, pl.srcRec, destRec, origin, 0.0f, pl.color);
-  }
-  else if (rec.x + rec.width < 0) {
-    world->player.rectangle.x = SCREEN_WIDTH - rec.width;
-  }
-  else if (rec.x < 0) {
-    Rectangle destRec = {SCREEN_WIDTH + rec.x, rec.y, rec.width, rec.height};
-    DrawTexturePro(pl.texture2d, pl.srcRec, destRec, origin, 0.0f, pl.color);
-  }
-
-  float overflowY = rec.y + rec.height - SCREEN_HEIGHT;
-  bool resetY = overflowY > rec.width;
-  if (resetY) {
-    world->player.rectangle.y = 0;
-  }
-  else if (overflowY > 0) {
-    Rectangle destRec = {rec.x, -rec.height+overflowY, rec.width, rec.height};
-    DrawTexturePro(pl.texture2d, pl.srcRec, destRec, origin, 0.0f, pl.color);
-  }
-  else if (rec.y + rec.height < 0) {
-    world->player.rectangle.y = SCREEN_HEIGHT - rec.height;
-  }
-  else if (rec.y < 0) {
-    Rectangle destRec = {rec.x, SCREEN_HEIGHT+rec.y, rec.width, rec.height};
-    DrawTexturePro(pl.texture2d, pl.srcRec, destRec, origin, 0.0f, pl.color);
-  }
-
-  DrawTexturePro(pl.texture2d, pl.srcRec, rec, origin, 0.0f, pl.color);
+void DrawPlayer(Player *player) {
+  DrawTexturePro(
+    player->texture2d,
+    player->srcRec,
+    player->rectangle,
+    (Vector2){ 0.0f, 0.0f },
+    0.0f,
+    player->color);
 }
 
 void ChangeColor(Player *player) {
@@ -130,52 +103,84 @@ void ChangeColor(Player *player) {
 }
 
 void HandleInput(World *world) {
-  // Update player velocity.
-  if (IsKeyPressed(KEY_RIGHT)) {
-    ChangeColor(&(world->player));
-    world->player.velocity.x += 100;
-  }
-  if (IsKeyPressed(KEY_LEFT)) {
-    ChangeColor(&(world->player));
-    world->player.velocity.x -= 100;
-  }
-  if (IsKeyPressed(KEY_UP)) {
-    ChangeColor(&(world->player));
-    world->player.velocity.y -= 100;
-  }
-  if (IsKeyPressed(KEY_DOWN)) {
-    ChangeColor(&(world->player));
-    world->player.velocity.y += 100;
+
+  switch (world->state) {
+    case START: {
+      if (IsKeyPressed(KEY_ENTER)) world->state = RUN;
+    } break;
+    case RUN: {
+      // Update player velocity.
+      if (IsKeyPressed(KEY_RIGHT)) {
+	ChangeColor(&(world->player));
+	world->player.velocity.x += 100;
+      }
+      if (IsKeyPressed(KEY_LEFT)) {
+	ChangeColor(&(world->player));
+	world->player.velocity.x -= 100;
+      }
+      if (IsKeyPressed(KEY_UP)) {
+	ChangeColor(&(world->player));
+	world->player.velocity.y -= 100;
+      }
+      if (IsKeyPressed(KEY_DOWN)) {
+	ChangeColor(&(world->player));
+	world->player.velocity.y += 100;
+      }
+    } break;
+    default: break;
   }
 }
 
 void DrawWorld(World *world) {
+  BeginDrawing();
+  ClearBackground(GRAY);
   switch (world->state) {
     case START: {
       DrawTextCenter("Press Enter to start!", 50, RED);
-      if (IsKeyPressed(KEY_ENTER)) world->state = RUN;
     } break;
     case RUN: {
-      DrawPlayer(world);
+      DrawPlayer(&(world->player));
     } break;
     default: break;
+  }
+  EndDrawing();
+}
+
+void UpdatePlayer(Player *player, float dt) {
+  Velocity v = player->velocity;
+  Rectangle *rec = &(player->rectangle);
+
+  float nextX = rec->x + dt*v.x;
+  if (nextX > SCREEN_WIDTH) {
+    rec->x = -rec->width;
+  }
+  else if (nextX + rec->width < 0) {
+    rec->x = SCREEN_WIDTH;
+  }
+  else {
+    rec->x = nextX;
+  }
+
+  float nextY = rec->y + dt*v.y;
+  if (nextY > SCREEN_HEIGHT) {
+    rec->y = -rec->height;
+  }
+  else if (nextY + rec->height < 0) {
+    rec->y = SCREEN_HEIGHT;
+  }
+  else {
+    rec->y = nextY;
   }
 }
 
 void MainLoop(World *world) {
   float dt = GetFrameTime();
   
-  BeginDrawing();
-  ClearBackground(GRAY);
   HandleInput(world);
 
-  // Update player position.
-  Velocity v = world->player.velocity;
-  world->player.rectangle.x += dt*v.x;
-  world->player.rectangle.y += dt*v.y;
+  UpdatePlayer(&(world->player), dt);
 
   DrawWorld(world);
-  EndDrawing();
 }
 
 int main() {
