@@ -6,9 +6,12 @@ int SCREEN_WIDTH;
 int SCREEN_HEIGHT;
 int SCREEN_HALF_W;
 int SCREEN_HALF_H;
-int N_COLORS=12;
-Color COLORS[13]={RED, WHITE, BLUE, ORANGE, PINK, MAROON, GREEN, LIME, DARKGREEN, SKYBLUE, DARKBLUE, PURPLE, YELLOW};
-Color PLAYER_COLOR=RED;
+int DECAY=5;
+int ACCELERATION=25;
+int CAP_SPEED=1500;
+int N_COLORS=11;
+Color COLORS[12]={RED, BLUE, ORANGE, PINK, MAROON, GREEN, LIME, DARKGREEN, SKYBLUE, DARKBLUE, PURPLE, YELLOW};
+Color PLAYER_COLOR=WHITE;
 Rectangle PLAYER_RECTANGLE={0.0, 0.0, 200.0, 200.0};
 unsigned int SEED=69;
 
@@ -37,7 +40,7 @@ typedef struct World {
   enum State state;
 } World;
 
-World initialize_world() {
+World InitializeWorld() {
   // Seed
   SetRandomSeed(SEED);
 
@@ -102,30 +105,49 @@ void ChangeColor(Player *player) {
   }
 }
 
-void HandleInput(World *world) {
+bool PressedOrHeld(int key) {
+  return (IsKeyPressed(key) || IsKeyDown(key));
+}
 
+void HandleInput(World *world) {
   switch (world->state) {
     case START: {
       if (IsKeyPressed(KEY_ENTER)) world->state = RUN;
     } break;
     case RUN: {
       // Update player velocity.
-      if (IsKeyPressed(KEY_RIGHT)) {
-	ChangeColor(&(world->player));
-	world->player.velocity.x += 100;
+      if (world->player.velocity.x < 0) {
+	world->player.velocity.x += DECAY;
+      } else if (world->player.velocity.x > 0) {
+	world->player.velocity.x -= DECAY;
       }
-      if (IsKeyPressed(KEY_LEFT)) {
-	ChangeColor(&(world->player));
-	world->player.velocity.x -= 100;
+
+      if (world->player.velocity.y < 0) {
+	world->player.velocity.y += DECAY;
+      } else if (world->player.velocity.y > 0) {
+	world->player.velocity.y -= DECAY;
       }
-      if (IsKeyPressed(KEY_UP)) {
+
+      if (PressedOrHeld(KEY_RIGHT)) {
 	ChangeColor(&(world->player));
-	world->player.velocity.y -= 100;
+	world->player.velocity.x += ACCELERATION;
       }
-      if (IsKeyPressed(KEY_DOWN)) {
+      if (PressedOrHeld(KEY_LEFT)) {
 	ChangeColor(&(world->player));
-	world->player.velocity.y += 100;
+	world->player.velocity.x -= ACCELERATION;
       }
+      if (PressedOrHeld(KEY_UP)) {
+	ChangeColor(&(world->player));
+	world->player.velocity.y -= ACCELERATION;
+      }
+      if (PressedOrHeld(KEY_DOWN)) {
+	ChangeColor(&(world->player));
+	world->player.velocity.y += ACCELERATION;
+      }
+      if (world->player.velocity.x > CAP_SPEED) world->player.velocity.x = CAP_SPEED;
+      if (world->player.velocity.x < -CAP_SPEED) world->player.velocity.x = -CAP_SPEED;
+      if (world->player.velocity.y > CAP_SPEED) world->player.velocity.y = CAP_SPEED;
+      if (world->player.velocity.y < -CAP_SPEED) world->player.velocity.y = -CAP_SPEED;
     } break;
     default: break;
   }
@@ -140,6 +162,7 @@ void DrawWorld(World *world) {
     } break;
     case RUN: {
       DrawPlayer(&(world->player));
+      world->player.color = WHITE;
     } break;
     default: break;
   }
@@ -148,34 +171,34 @@ void DrawWorld(World *world) {
 
 void UpdatePlayer(Player *player, float dt) {
   Velocity v = player->velocity;
+  if ((v.x < 0 && player->srcRec.width < 0)
+      ||
+      (v.x > 0 && player->srcRec.width > 0)) player->srcRec.width *= -1;
+
   Rectangle *rec = &(player->rectangle);
 
   float nextX = rec->x + dt*v.x;
   if (nextX > SCREEN_WIDTH) {
     rec->x = -rec->width;
-  }
-  else if (nextX + rec->width < 0) {
+  } else if (nextX + rec->width < 0) {
     rec->x = SCREEN_WIDTH;
-  }
-  else {
+  } else {
     rec->x = nextX;
   }
 
   float nextY = rec->y + dt*v.y;
   if (nextY > SCREEN_HEIGHT) {
     rec->y = -rec->height;
-  }
-  else if (nextY + rec->height < 0) {
+  } else if (nextY + rec->height < 0) {
     rec->y = SCREEN_HEIGHT;
-  }
-  else {
+  } else {
     rec->y = nextY;
   }
 }
 
 void MainLoop(World *world) {
   float dt = GetFrameTime();
-  
+
   HandleInput(world);
 
   UpdatePlayer(&(world->player), dt);
@@ -184,13 +207,13 @@ void MainLoop(World *world) {
 }
 
 int main() {
-  World world = initialize_world();
+  World world = InitializeWorld();
   SetTargetFPS(60);
 
   while (!WindowShouldClose()) {
     MainLoop(&world);
   }
-  
+
   CloseWindow();
   return 0;
 }
