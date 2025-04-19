@@ -2,15 +2,22 @@
 #include <stdint.h>
 #include "raylib.h"
 
+int SCREEN_WIDTH;
+int SCREEN_HEIGHT;
+int SCREEN_HALF_W;
+int SCREEN_HALF_H;
+int N_COLORS=12;
+Color COLORS[13]={RED, WHITE, BLUE, ORANGE, PINK, MAROON, GREEN, LIME, DARKGREEN, SKYBLUE, DARKBLUE, PURPLE, YELLOW};
+Color PLAYER_COLOR=RED;
+Rectangle PLAYER_RECTANGLE={0.0, 0.0, 100.0, 100.0};
+unsigned int SEED=69;
+
+const char* BUNNY_SRC = "resources/bunny.png";
+
 enum State {
   START,
   RUN
 };
-
-typedef struct Position {
-  float x;
-  float y;
-} Position;
 
 typedef struct Velocity {
   float x;
@@ -19,10 +26,10 @@ typedef struct Velocity {
 
 typedef struct Player {
   Color color;
-  float width;
-  float height;
-  Position position;
+  Rectangle rectangle;
   Velocity velocity;
+  Texture2D texture2d;
+  Rectangle srcRec;
 } Player;
 
 typedef struct World {
@@ -30,34 +37,38 @@ typedef struct World {
   enum State state;
 } World;
 
-int SCREEN_WIDTH;
-int SCREEN_HEIGHT;
-int SCREEN_HALF_W;
-int SCREEN_HALF_H;
-int N_COLORS=12;
-Color COLORS[13]={RED, WHITE, BLUE, ORANGE, PINK, MAROON, GREEN, LIME, DARKGREEN, SKYBLUE, DARKBLUE, PURPLE, YELLOW};
-Color PLAYER_COLOR=RED;
-int PLAYER_WIDTH=100;
-int PLAYER_HEIGHT=100;
-unsigned int SEED=69;
-
 World initialize_world() {
+  // Seed
   SetRandomSeed(SEED);
-  InitWindow(0, 0, "The Game");
+
+  // Window
+  InitWindow(0, 0, "The Bunny Game");
   ToggleFullscreen();
   SCREEN_WIDTH = GetRenderWidth();
   SCREEN_HEIGHT = GetRenderHeight();
   SCREEN_HALF_W = SCREEN_WIDTH/2;
   SCREEN_HALF_H = SCREEN_HEIGHT/2;
+
+  // Player
   Player player;
   player.color = PLAYER_COLOR;
-  player.width = PLAYER_WIDTH;
-  player.height = PLAYER_HEIGHT;
-  Position position = {SCREEN_HALF_W-PLAYER_WIDTH/2, SCREEN_HALF_H-PLAYER_HEIGHT/2};
-  player.position = position;
+  player.rectangle = PLAYER_RECTANGLE;
   Velocity velocity = {0.0, 0.0};
   player.velocity = velocity;
+  Texture2D bunny = LoadTexture(BUNNY_SRC);
+  player.texture2d = bunny;
+  Rectangle srcRec = {
+    0.0f,
+    0.0f,
+    (float)player.texture2d.width,
+    (float)player.texture2d.height
+  };
+  player.srcRec = srcRec;
+
+  // State
   uint8_t state = START;
+
+  // World
   World world = {player, state};
   return world;
 }
@@ -69,41 +80,46 @@ void DrawTextCenter(const char *text, int fontSize, Color color) {
 }
 
 void DrawPlayer(World *world) {
-  // Check position boundaries.
   Player pl = world->player;
-  Position pos = pl.position;
+  Rectangle rec = pl.rectangle;
 
-  float overflowX = pos.x + pl.width - SCREEN_WIDTH;
-  bool resetX = overflowX > pl.width;
+  Vector2 origin = { 0.0f, 0.0f };
+
+  float overflowX = rec.x + rec.width - SCREEN_WIDTH;
+  bool resetX = overflowX > rec.width;
   if (resetX) {
-    world->player.position.x = 0;
+    world->player.rectangle.x = 0;
   }
   else if (overflowX > 0) {
-    DrawRectangle(0, pos.y, overflowX, pl.height, pl.color);
+    Rectangle destRec = {-rec.width+overflowX, rec.y, rec.width, rec.height};
+    DrawTexturePro(pl.texture2d, pl.srcRec, destRec, origin, 0.0f, pl.color);
   }
-  else if (pos.x + pl.width < 0) {
-    world->player.position.x = SCREEN_WIDTH - pl.width;
+  else if (rec.x + rec.width < 0) {
+    world->player.rectangle.x = SCREEN_WIDTH - rec.width;
   }
-  else if (pos.x < 0) {
-    DrawRectangle(SCREEN_WIDTH + pos.x, pos.y, SCREEN_WIDTH + pos.x, pl.height, pl.color);
+  else if (rec.x < 0) {
+    Rectangle destRec = {SCREEN_WIDTH + rec.x, rec.y, rec.width, rec.height};
+    DrawTexturePro(pl.texture2d, pl.srcRec, destRec, origin, 0.0f, pl.color);
   }
 
-  float overflowY = pos.y + pl.height - SCREEN_HEIGHT;
-  bool resetY = overflowY > pl.width;
+  float overflowY = rec.y + rec.height - SCREEN_HEIGHT;
+  bool resetY = overflowY > rec.width;
   if (resetY) {
-    world->player.position.y = 0;
+    world->player.rectangle.y = 0;
   }
   else if (overflowY > 0) {
-    DrawRectangle(pos.x, 0, pl.width, overflowY, pl.color);
+    Rectangle destRec = {rec.x, -rec.height+overflowY, rec.width, rec.height};
+    DrawTexturePro(pl.texture2d, pl.srcRec, destRec, origin, 0.0f, pl.color);
   }
-  else if (pos.y + pl.height < 0) {
-    world->player.position.y = SCREEN_HEIGHT - pl.height;
+  else if (rec.y + rec.height < 0) {
+    world->player.rectangle.y = SCREEN_HEIGHT - rec.height;
   }
-  else if (pos.y < 0) {
-    DrawRectangle(pos.x, SCREEN_HEIGHT + pos.y, pl.width, SCREEN_HEIGHT + pos.y, pl.color);
+  else if (rec.y < 0) {
+    Rectangle destRec = {rec.x, SCREEN_HEIGHT+rec.y, rec.width, rec.height};
+    DrawTexturePro(pl.texture2d, pl.srcRec, destRec, origin, 0.0f, pl.color);
   }
-  
-  DrawRectangle(pos.x, pos.y, pl.width, pl.height, pl.color);
+
+  DrawTexturePro(pl.texture2d, pl.srcRec, rec, origin, 0.0f, pl.color);
 }
 
 void ChangeColor(Player *player) {
@@ -140,13 +156,6 @@ void DrawWorld(World *world) {
       if (IsKeyPressed(KEY_ENTER)) world->state = RUN;
     } break;
     case RUN: {
-      // Update player position.
-      float dt = GetFrameTime();
-      Velocity v = world->player.velocity;
-      world->player.position.x += dt*v.x;
-      world->player.position.y += dt*v.y;
-
-      // Draw player.
       DrawPlayer(world);
     } break;
     default: break;
@@ -154,14 +163,22 @@ void DrawWorld(World *world) {
 }
 
 void MainLoop(World *world) {
+  float dt = GetFrameTime();
+  
   BeginDrawing();
   ClearBackground(GRAY);
   HandleInput(world);
+
+  // Update player position.
+  Velocity v = world->player.velocity;
+  world->player.rectangle.x += dt*v.x;
+  world->player.rectangle.y += dt*v.y;
+
   DrawWorld(world);
   EndDrawing();
 }
 
-int main(int argc, char **argv) {
+int main() {
   World world = initialize_world();
   SetTargetFPS(60);
 
