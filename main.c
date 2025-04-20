@@ -12,11 +12,12 @@ int CAP_SPEED=1500;
 int N_COLORS=11;
 Color COLORS[12]={RED, BLUE, ORANGE, PINK, MAROON, GREEN, LIME, DARKGREEN, SKYBLUE, DARKBLUE, PURPLE, YELLOW};
 Color PLAYER_COLOR=WHITE;
-Rectangle PLAYER_RECTANGLE={0.0, 0.0, 200.0, 200.0};
+Rectangle PLAYER_RECTANGLE={0.0, 0.0, 64.0, 64.0};
 unsigned int SEED=69;
 
-const char* BUNNY_SRC = "resources/bunny.png";
-
+const char* BUNNY_SRC = "resources/bunny2.png";
+const char* EGG_SRC = "resources/egg1.png";
+const char* BG_SRC = "resources/grass3.png";
 enum State {
   START,
   RUN
@@ -38,6 +39,12 @@ typedef struct Player {
 typedef struct World {
   Player player;
   enum State state;
+  Texture2D background;
+  Rectangle srcRec;
+  Rectangle dstRec;
+  Texture2D egg;
+  Vector2 eggPosition;
+  int eggFrame;
 } World;
 
 World InitializeWorld() {
@@ -77,8 +84,26 @@ World InitializeWorld() {
   // State
   uint8_t state = START;
 
+  // Background
+  Texture2D background = LoadTexture(BG_SRC);
+  Rectangle bgSrc = {
+    0.0f,
+    0.0f,
+    (float)SCREEN_HALF_W/2,
+    (float)SCREEN_HALF_H/2,
+  };
+  Rectangle bgDst = {
+    0.0f,
+    0.0f,
+    (float)SCREEN_WIDTH,
+    (float)SCREEN_HEIGHT,
+  };
+
+  Texture2D egg = LoadTexture(EGG_SRC);
+  Vector2 eggPosition = {50.0f, 200.0f};
+  int eggFrame = 0;
   // World
-  World world = {player, state};
+  World world = {player, state, background, bgSrc, bgDst, egg, eggPosition, eggFrame};
   return world;
 }
 
@@ -96,6 +121,15 @@ void DrawPlayer(Player *player) {
     (Vector2){ 0.0f, 0.0f },
     0.0f,
     player->color);
+}
+
+void DrawEgg(World *world) {
+  DrawTextureEx(
+    world->egg,
+    world->eggPosition,
+    0.0f,
+    3.0f,
+    GetColor(0xf1f2daff));
 }
 
 void ChangeColor(Player *player) {
@@ -155,12 +189,20 @@ void HandleInput(World *world) {
 
 void DrawWorld(World *world) {
   BeginDrawing();
-  ClearBackground(GRAY);
+  ClearBackground(GetColor(0x00303B00));
+  DrawTexturePro(
+    world->background,
+    world->srcRec,
+    world->dstRec,
+    (Vector2){ 0.0f, 0.0f },
+    0.0f,
+    GetColor(0xf1f2daff));
   switch (world->state) {
     case START: {
-      DrawTextCenter("Press Enter to start!", 50, RED);
+      DrawTextCenter("Press Enter to start!", 50, GetColor(0xF1F2DAFF));
     } break;
     case RUN: {
+      DrawEgg(world);
       DrawPlayer(&(world->player));
       world->player.color = WHITE;
     } break;
@@ -196,13 +238,44 @@ void UpdatePlayer(Player *player, float dt) {
   }
 }
 
+void UpdateEgg(World *world) {
+  world->eggFrame++;
+  if (world->eggFrame > 60) {world->eggFrame = 0;}
+  if (world->eggFrame <= 15) {
+    world->eggPosition.x++;
+    world->eggPosition.y--;
+  } else if (world->eggFrame <= 30) {
+    world->eggPosition.x++;
+    world->eggPosition.y++;
+  } else if (world->eggFrame <= 45) {
+    world->eggPosition.x--;
+    world->eggPosition.y--;
+  } else if (world->eggFrame <= 60) {
+    world->eggPosition.x--;
+    world->eggPosition.y++;
+  }
+}
+
+bool CatchEgg(World *world) {
+  return CheckCollisionPointRec(world->eggPosition, world->player.rectangle);
+}
+
+void NewEgg(World *world) {
+  world->eggPosition.x = GetRandomValue(0, SCREEN_WIDTH);
+  world->eggPosition.y = GetRandomValue(0, SCREEN_HEIGHT);
+  world->eggFrame = 0;
+}
+
 void MainLoop(World *world) {
   float dt = GetFrameTime();
 
   HandleInput(world);
-
+  
   UpdatePlayer(&(world->player), dt);
+  UpdateEgg(world);
 
+  if (CatchEgg(world)) NewEgg(world);
+  
   DrawWorld(world);
 }
 
@@ -214,6 +287,10 @@ int main() {
     MainLoop(&world);
   }
 
+  UnloadTexture(world.player.texture2d);
+  UnloadTexture(world.background);
+  UnloadTexture(world.egg);
+  
   CloseWindow();
   return 0;
 }
